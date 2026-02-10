@@ -1,6 +1,6 @@
 # Company Matching Tool
 
-Match tradeshow company names to CRM accounts using OpenAI embeddings and intelligent canonicalization.
+Match companies from two lists using OpenAI embeddings and intelligent canonicalization. Works with any two company lists (e.g., event attendees vs CRM, vendor lists vs databases, etc.).
 
 ## Quick Start
 
@@ -21,8 +21,8 @@ cp .env.example .env
 ### 3. Run the Matching
 ```bash
 python match_companies.py \
-  --tradeshow tradeshow.csv \
-  --crm crm.csv \
+  --source list1.csv \
+  --target list2.csv \
   --output matches.csv \
   --threshold 0.82 \
   --topk 3
@@ -37,17 +37,17 @@ The tool uses a two-pass matching approach:
 
 ## CSV Requirements
 
-### Tradeshow CSV
-Must have a column with company names (default column name: `company`)
+### Source CSV
+Must have a column with company names (default column name: `company`). Can optionally include an ID column.
 
 Example:
 ```csv
-company
-Acme Corporation
-XYZ Industries Inc.
+company,attendee_id
+Acme Corporation,ATT-001
+XYZ Industries Inc.,ATT-002
 ```
 
-### CRM CSV
+### Target CSV
 Must have columns for company names and account IDs:
 - Company names (default: `company`)
 - Account IDs (default: `account_id`)
@@ -59,15 +59,16 @@ Acme Corp,ACC-001
 XYZ Industries,ACC-002
 ```
 
-**Note**: Column names can be customized with `--tradeshow-col`, `--crm-col`, and `--crm-id-col` flags.
+**Note**: Column names can be customized with `--source-col`, `--target-col`, `--source-id-col`, and `--target-id-col` flags.
 
 ## Output
 
 The script generates a CSV with these columns:
 
-- `tradeshow_company` - Original tradeshow company name
-- `crm_candidate` - Matched CRM company name
-- `crm_account_id` - CRM account ID
+- `source_company` - Original source company name
+- `source_account_id` - Source account ID (if provided via `--source-id-col`)
+- `target_company` - Matched target company name
+- `target_account_id` - Target account ID
 - `similarity` - Match confidence (0-1, or 1.0 for exact matches)
 - `match_type` - One of:
   - `exact_canonical` - Exact match after canonicalization
@@ -79,17 +80,18 @@ The script generates a CSV with these columns:
 
 ```bash
 # Required
---tradeshow FILE       Path to tradeshow CSV
---crm FILE            Path to CRM CSV
+--source FILE         Path to source CSV (companies to match)
+--target FILE         Path to target CSV (companies to match against)
 
 # Optional
 --output FILE         Output CSV path (default: matches.csv)
 --threshold FLOAT     Match threshold 0-1 (default: 0.82)
 --topk INT           Top candidates to show (default: 3)
 --model NAME         OpenAI model (default: text-embedding-3-small)
---tradeshow-col NAME  Tradeshow company column (default: company)
---crm-col NAME       CRM company column (default: company)
---crm-id-col NAME    CRM account ID column (default: account_id)
+--source-col NAME    Source company column (default: company)
+--target-col NAME    Target company column (default: company)
+--source-id-col NAME Source account ID column (optional)
+--target-id-col NAME Target account ID column (default: account_id)
 --cache FILE         Embedding cache path (default: emb_cache.json)
 --batch-size INT     API batch size (default: 128)
 ```
@@ -110,15 +112,15 @@ The script generates a CSV with these columns:
 
 ### Performance
 - Default settings work well for most use cases
-- For very large CRM lists (100k+ records), consider implementing FAISS/hnswlib indexing
+- For very large target lists (100k+ records), consider implementing FAISS/hnswlib indexing
 
 ## Example Workflow
 
 ```bash
-# Initial run
+# Initial run with tradeshow attendees vs CRM
 python match_companies.py \
-  --tradeshow event_companies.csv \
-  --crm salesforce_accounts.csv \
+  --source event_companies.csv \
+  --target salesforce_accounts.csv \
   --output matched_accounts.csv \
   --threshold 0.82
 
@@ -127,8 +129,8 @@ python match_companies.py \
 
 # Adjust threshold if needed and re-run
 python match_companies.py \
-  --tradeshow event_companies.csv \
-  --crm salesforce_accounts.csv \
+  --source event_companies.csv \
+  --target salesforce_accounts.csv \
   --output matched_accounts_v2.csv \
   --threshold 0.85
 ```
@@ -141,7 +143,7 @@ python match_companies.py \
 
 **"Column 'company' not found"**
 - Your CSV uses different column names
-- Use `--tradeshow-col` or `--crm-col` to specify the correct columns
+- Use `--source-col` or `--target-col` to specify the correct columns
 
 **Rate limit errors**
 - The script automatically retries with backoff

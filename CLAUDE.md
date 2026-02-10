@@ -1,13 +1,13 @@
 # Company Matching Tool - Project Context
 
 ## Overview
-This project matches tradeshow company names to CRM account records using OpenAI embeddings and intelligent canonicalization techniques.
+This project matches company names from two lists using OpenAI embeddings and intelligent canonicalization techniques. It's a generic tool that can compare any two lists of companies (e.g., tradeshow attendees vs CRM records, vendor lists vs master databases, etc.).
 
 ## Project Structure
-- `match_companies 1.py` - Main matching script (should be renamed to `match_companies.py`)
+- `match_companies.py` - Main matching script
 - `requirements.txt` - Python dependencies
 - `emb_cache.json` - Embedding cache (auto-generated, should be in .gitignore)
-- Input CSVs: tradeshow companies and CRM records
+- Input CSVs: source companies and target companies
 - Output: CSV with matches, similarities, and match types
 
 ## How It Works
@@ -33,8 +33,8 @@ Core dependencies (only what's actually needed):
 ## Usage Pattern
 ```bash
 python match_companies.py \
-  --tradeshow tradeshow.csv \
-  --crm crm.csv \
+  --source list1.csv \
+  --target list2.csv \
   --output matches.csv \
   --threshold 0.82 \
   --topk 3
@@ -42,10 +42,10 @@ python match_companies.py \
 
 ## CSV Format Requirements
 Both input CSVs need:
-- Tradeshow CSV: column with company names (default: `company`)
-- CRM CSV: columns for company names (default: `company`) and account IDs (default: `account_id`)
+- Source CSV: column with company names (default: `company`), optional ID column
+- Target CSV: columns for company names (default: `company`) and account IDs (default: `account_id`)
 
-Override column names with `--tradeshow-col`, `--crm-col`, and `--crm-id-col` flags.
+Override column names with `--source-col`, `--target-col`, `--source-id-col`, and `--target-id-col` flags.
 
 ## Code Style Notes
 - Uses minimal dependencies intentionally
@@ -57,4 +57,4 @@ Override column names with `--tradeshow-col`, `--crm-col`, and `--crm-id-col` fl
 ## Performance Considerations
 - Default embedding model: `text-embedding-3-small` (balance of speed/cost)
 - Batch size: 128 texts per API call
-- For very large CRM lists (100k+), consider replacing `topk_similar` with FAISS/hnswlib ANN index
+- For very large target lists (100k+), consider replacing `topk_similar` with FAISS/hnswlib ANN index

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-Match tradeshow companies to CRM accounts using OpenAI embeddings.
+Match companies from two lists using OpenAI embeddings.
 
 This script does two passes:
   1) **Fast exact pass** on a *canonicalized* version of names
@@ -9,29 +9,30 @@ This script does two passes:
      articles like "the"). If a canonical string matches exactly, we accept it.
   2) **Semantic pass** using embeddings for anything that wasn't matched in (1).
      We generate a few short aliases ("acme corp" → "ac", "acmecorp"), embed
-     those alias strings, and rank CRM candidates by cosine similarity.
+     those alias strings, and rank target candidates by cosine similarity.
 
-Output: a CSV with columns: tradeshow_company, crm_candidate, account_id, similarity,
-match_type (exact_canonical | embedding | review_needed), and alt_candidates.
+Output: a CSV with columns: source_company, source_account_id, target_company,
+target_account_id, similarity, match_type (exact_canonical | embedding | review_needed),
+and alt_candidates.
 
 Good defaults:
 - Use `text-embedding-3-small` for speed/cost. Change with `--model`.
 - Start with `--threshold 0.82` and adjust after sampling a few results.
 
 Typical usage (one-liner):
-    python match_companies.py --tradeshow tradeshow.csv --crm crm.csv --output matches.csv --threshold 0.82 --topk 3
+    python match_companies.py --source list1.csv --target list2.csv --output matches.csv --threshold 0.82 --topk 3
 
 CSV expectations:
 - Both files should have a column with the company name (default column name:
-  `company`). You can override with `--tradeshow-col` and `--crm-col`.
-  crm.csv should also have a column with the account id (default column name:
+  `company`). You can override with `--source-col` and `--target-col`.
+  The target CSV should also have a column with the account id (default column name:
   'account_id')
 
 Notes:
 - The script caches embeddings in `emb_cache.json` so you only pay for new rows.
 - Cosine similarity is implemented as a dot product because we L2-normalize
   vectors.
-- If you have very large CRM lists (hundreds of thousands), consider swapping
+- If you have very large target lists (hundreds of thousands), consider swapping
   `topk_similar` for an ANN index (e.g., FAISS or hnswlib) — the rest stays the
   same.
 """
@@ -227,53 +228,58 @@ def topk_similar(
 
 def main():
     """CLI entry point: parse args, run matching, write results."""
-    p = argparse.ArgumentParser(description="Match tradeshow companies to CRM accounts using OpenAI embeddings.")
+    p = argparse.ArgumentParser(description="Match companies from two lists using OpenAI embeddings.")
     # Required paths for the two CSVs
-    p.add_argument("--tradeshow", required=True, help="CSV with tradeshow companies")
-    p.add_argument("--crm", required=True, help="CSV with CRM companies")
+    p.add_argument("--source", required=True, help="CSV with source companies to match")
+    p.add_argument("--target", required=True, help="CSV with target companies to match against")
 
     # Column names if they aren't the default `company`
-    p.add_argument("--tradeshow-col", default="company", help="Column name in tradeshow CSV (default: company)")
-    p.add_argument("--crm-col", default="company", help="Column name in CRM CSV (default: company)")
+    p.add_argument("--source-col", default="company", help="Column name in source CSV (default: company)")
+    p.add_argument("--target-col", default="company", help="Column name in target CSV (default: company)")
 
     # Embedding model + knobs
     p.add_argument("--model", default="text-embedding-3-small", help="OpenAI embedding model")
     p.add_argument("--output", default="matches.csv", help="Output CSV path")
     p.add_argument("--threshold", type=float, default=0.82, help="Cosine similarity threshold to accept a match")
-    p.add_argument("--topk", type=int, default=3, help="How many candidates to show per tradeshow company")
+    p.add_argument("--topk", type=int, default=3, help="How many candidates to show per source company")
     p.add_argument("--cache", default="emb_cache.json", help="Path to local embedding cache")
     p.add_argument("--batch-size", type=int, default=128, help="Embedding batch size")
 
-    # New: CRM account ID column
-    p.add_argument("--crm-id-col", default="account_id", help="Column in CRM CSV with the unique account ID (default: account_id)")
+    # Target account ID column
+    p.add_argument("--target-id-col", default="account_id", help="Column in target CSV with the unique account ID (default: account_id)")
+
+    # Source account ID column (optional)
+    p.add_argument("--source-id-col", default="", help="Column in source CSV with unique source ID (optional)")
 
     args = p.parse_args()
-    id_col = args.crm_id_col
+    id_col = args.target_id_col
+    source_id_col = args.source_id_col
 
     # --- Load and normalize input data ---
-    ts_rows = normalize_rows(read_csv(args.tradeshow), args.tradeshow_col)
-    crm_rows = normalize_rows(read_csv(args.crm), args.crm_col)
+    source_rows = normalize_rows(read_csv(args.source), args.source_col)
+    target_rows = normalize_rows(read_csv(args.target), args.target_col)
 
     # --- Pass 1: exact canonical matches ---
-    # Build an index from canonical name → list of CRM rows that share it.
-    canon_to_crm: Dict[str, List[Dict[str, str]]] = {}
-    for r in crm_rows:
-        canon_to_crm.setdefault(r["_canon"], []).append(r)
+    # Build an index from canonical name → list of target rows that share it.
+    canon_to_target: Dict[str, List[Dict[str, str]]] = {}
+    for r in target_rows:
+        canon_to_target.setdefault(r["_canon"], []).append(r)
 
     results: List[Dict[str, str]] = []
-    unresolved: List[int] = []  # indexes of tradeshow rows to process in the embedding pass
+    unresolved: List[int] = []  # indexes of source rows to process in the embedding pass
 
-    for i, r in enumerate(ts_rows):
+    for i, r in enumerate(source_rows):
         c = r["_canon"]
-        exacts = canon_to_crm.get(c, [])
+        exacts = canon_to_target.get(c, [])
         if c and exacts:
-            # If multiple CRM rows share the same canonical, accept the first and
+            # If multiple target rows share the same canonical, accept the first and
             # record the rest as alternatives for human review.
             best = exacts[0]
             results.append({
-                "tradeshow_company": r["_raw_name"],
-                "crm_candidate": best["_raw_name"],
-                "crm_account_id": best.get(id_col, ""),
+                "source_company": r["_raw_name"],
+                "source_account_id": r.get(source_id_col, "") if source_id_col else "",
+                "target_company": best["_raw_name"],
+                "target_account_id": best.get(id_col, ""),
                 "similarity": 1.0,
                 "match_type": "exact_canonical",
                 "alt_candidates": "; ".join(
@@ -289,35 +295,36 @@ def main():
         client = OpenAI()  # uses OPENAI_API_KEY from your environment
         cache = EmbeddingCache(args.cache, model=args.model)
 
-        # Collect display names (original strings) for unresolved tradeshow rows
-        ts_unres_names = [ts_rows[i]["_raw_name"] for i in unresolved]
-        crm_names = [r["_raw_name"] for r in crm_rows]
+        # Collect display names (original strings) for unresolved source rows
+        source_unres_names = [source_rows[i]["_raw_name"] for i in unresolved]
+        target_names = [r["_raw_name"] for r in target_rows]
 
         # Convert names → alias strings → embeddings
-        ts_queries = make_queries(ts_unres_names)
-        crm_queries = make_queries(crm_names)
+        source_queries = make_queries(source_unres_names)
+        target_queries = make_queries(target_names)
 
-        Q = embed_texts(ts_queries, client, cache, batch_size=args.batch_size)  # Nq x d
-        X = embed_texts(crm_queries, client, cache, batch_size=args.batch_size)  # Nx x d
+        Q = embed_texts(source_queries, client, cache, batch_size=args.batch_size)  # Nq x d
+        X = embed_texts(target_queries, client, cache, batch_size=args.batch_size)  # Nx x d
 
-        # For each tradeshow query, retrieve the top-k CRM candidates + scores
+        # For each source query, retrieve the top-k target candidates + scores
         top_idx, top_sims = topk_similar(Q, X, k=args.topk)
 
         # Walk each row's candidates and apply the acceptance threshold
         for row_i, (cand_idxs, cand_sims) in enumerate(zip(top_idx, top_sims)):
-            ts_idx = unresolved[row_i]
-            ts_row = ts_rows[ts_idx]
+            source_idx = unresolved[row_i]
+            source_row = source_rows[source_idx]
             added = False  # whether we've accepted a candidate above threshold
             alts: List[str] = []
 
             for j, sim in zip(cand_idxs, cand_sims):
-                crm_row = crm_rows[int(j)]
+                target_row = target_rows[int(j)]
                 if not added and sim >= args.threshold:
                     # Accept the first candidate that clears the threshold
                     results.append({
-                        "tradeshow_company": ts_row["_raw_name"],
-                        "crm_candidate": crm_row["_raw_name"],
-                        "crm_account_id": crm_row.get(id_col, ""),
+                        "source_company": source_row["_raw_name"],
+                        "source_account_id": source_row.get(source_id_col, "") if source_id_col else "",
+                        "target_company": target_row["_raw_name"],
+                        "target_account_id": target_row.get(id_col, ""),
                         "similarity": round(float(sim), 6),
                         "match_type": "embedding",
                         "alt_candidates": "",
@@ -325,18 +332,19 @@ def main():
                     added = True
                 else:
                     # Keep other candidates (and sub-threshold ones) as alternates
-                    id_val = crm_row.get(id_col, "")
+                    id_val = target_row.get(id_col, "")
                     id_sfx = f" [{id_val}]" if id_val else ""
-                    alts.append(f"{crm_row['_raw_name']}{id_sfx} ({sim:.4f})")
+                    alts.append(f"{target_row['_raw_name']}{id_sfx} ({sim:.4f})")
 
             if not added:
                 # No candidate cleared the threshold. We still record the top-1
                 # so you have something to review manually.
-                top1 = crm_rows[int(cand_idxs[0])]
+                top1 = target_rows[int(cand_idxs[0])]
                 results.append({
-                    "tradeshow_company": ts_row["_raw_name"],
-                    "crm_candidate": top1["_raw_name"],
-                    "crm_account_id": top1.get(id_col, ""),
+                    "source_company": source_row["_raw_name"],
+                    "source_account_id": source_row.get(source_id_col, "") if source_id_col else "",
+                    "target_company": top1["_raw_name"],
+                    "target_account_id": top1.get(id_col, ""),
                     "similarity": round(float(cand_sims[0]), 6),
                     "match_type": "review_needed",
                     "alt_candidates": "; ".join(alts[1:]) if len(alts) > 1 else "",
@@ -346,7 +354,7 @@ def main():
     order = {"exact_canonical": 0, "embedding": 1, "review_needed": 2}
     results.sort(key=lambda r: (order.get(r["match_type"], 9), -r["similarity"]))
 
-    fields = ["tradeshow_company", "crm_candidate", "crm_account_id", "similarity", "match_type", "alt_candidates"]
+    fields = ["source_company", "source_account_id", "target_company", "target_account_id", "similarity", "match_type", "alt_candidates"]
     write_csv(args.output, results, fields)
 
     # Log a quick summary to stdout
