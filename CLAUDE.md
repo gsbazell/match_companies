@@ -24,10 +24,14 @@ The script uses a two-pass approach:
 - Three match types: `exact_canonical`, `embedding`, `review_needed`
 
 ## Dependencies
-Core dependencies (only what's actually needed):
+Core CLI dependencies (`requirements.txt`):
 - `openai` - For embeddings API
 - `numpy` - For vector operations
 - `Unidecode` - Optional, for accent folding in company names
+
+MCP server adds (`requirements-mcp.txt`):
+- `mcp` - Model Context Protocol SDK
+- `openpyxl` - Excel file reading
 
 ## Environment Variables
 - `OPENAI_API_KEY` - Required for OpenAI API access
