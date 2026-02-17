@@ -11,12 +11,11 @@ pip install -r requirements.txt
 
 ### 2. Configure API Key
 ```bash
-# Copy the example environment file
-cp .env.example .env
-
-# Edit .env and add your OpenAI API key
-# Get your key from: https://platform.openai.com/api-keys
+# Create a .env file and add your OpenAI API key
+echo 'OPENAI_API_KEY=your_key_here' > .env
 ```
+
+You can also pass the key directly at runtime with `--api-key`.
 
 ### 3. Run the Matching
 ```bash
@@ -94,6 +93,7 @@ The script generates a CSV with these columns:
 --target-id-col NAME Target account ID column (default: account_id)
 --cache FILE         Embedding cache path (default: emb_cache.json)
 --batch-size INT     API batch size (default: 128)
+--api-key KEY        OpenAI API key (overrides OPENAI_API_KEY)
 ```
 
 ## Tips
@@ -140,6 +140,7 @@ python match_companies.py \
 **"OpenAI API key not found"**
 - Ensure `.env` file exists with `OPENAI_API_KEY=your_key`
 - Or set environment variable: `export OPENAI_API_KEY=your_key`
+- Or pass it at runtime: `--api-key your_key`
 
 **"Column 'company' not found"**
 - Your CSV uses different column names
