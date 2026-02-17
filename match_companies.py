@@ -192,27 +192,45 @@ class EmbeddingCache:
         os.replace(tmp, self.path)
 
 def embed_texts(texts: List[str], client: OpenAI, cache: EmbeddingCache, batch_size=128) -> np.ndarray:
-    vecs = []
-    to_query = []
-    idx_map = {}
+    if not texts:
+        return np.empty((0, 0), dtype=np.float32)
+
+    def as_valid_vec(raw) -> np.ndarray:
+        try:
+            v = np.array(raw, dtype=np.float32)
+        except Exception:
+            return None
+        if v.ndim != 1 or v.size == 0:
+            return None
+        return v
+
+    vecs: List[np.ndarray] = [None] * len(texts)
+    to_query_idxs: List[int] = []
+    expected_dim = None
 
     # Resolve from cache or queue for API
     for i, t in enumerate(texts):
         cached = cache.get(t)
-        if cached is not None:
-            vecs.append(np.array(cached, dtype=np.float32))
-        else:
-            idx_map[len(to_query)] = i
-            to_query.append(t)
-            vecs.append(None)  # placeholder
+        v = as_valid_vec(cached) if cached is not None else None
+        if v is None:
+            to_query_idxs.append(i)
+            continue
+        if expected_dim is None:
+            expected_dim = int(v.size)
+        if int(v.size) != expected_dim:
+            # Cache entry is from a different shape; refresh from API.
+            to_query_idxs.append(i)
+            continue
+        vecs[i] = v
 
     # Call API in batches for missing ones
-    for chunk in batch(to_query, size=batch_size):
+    for chunk_idxs in batch(to_query_idxs, size=batch_size):
+        chunk_inputs = [texts[i] for i in chunk_idxs]
         while True:
             try:
                 resp = client.embeddings.create(
                     model=cache.model,
-                    input=chunk
+                    input=chunk_inputs
                 )
                 break
             except Exception as e:
@@ -221,12 +239,32 @@ def embed_texts(texts: List[str], client: OpenAI, cache: EmbeddingCache, batch_s
                 print(f"Embedding error: {e}. Retrying in {wait}s...", file=sys.stderr)
                 time.sleep(wait)
 
-        # Place results back in their positions
+        if len(resp.data) != len(chunk_idxs):
+            raise RuntimeError(
+                f"Embedding API returned {len(resp.data)} vectors for {len(chunk_idxs)} inputs."
+            )
+
+        # Place results back in their original positions
         for j, d in enumerate(resp.data):
-            i = idx_map[j]
-            vec = np.array(d.embedding, dtype=np.float32)
+            i = chunk_idxs[j]
+            vec = as_valid_vec(d.embedding)
+            if vec is None:
+                raise RuntimeError(f"Invalid embedding payload for input index {i}.")
+            if expected_dim is None:
+                expected_dim = int(vec.size)
+            if int(vec.size) != expected_dim:
+                raise RuntimeError(
+                    f"Inconsistent embedding dimension for input index {i}: got {vec.size}, expected {expected_dim}."
+                )
             vecs[i] = vec
             cache.set(texts[i], d.embedding)
+
+    missing = [i for i, v in enumerate(vecs) if v is None]
+    if missing:
+        first = missing[0]
+        raise RuntimeError(
+            f"Missing embedding vectors for {len(missing)} input(s); first missing index={first} text={texts[first]!r}."
+        )
 
     cache.flush()
     # Stack and L2-normalize for cosine as dot product
