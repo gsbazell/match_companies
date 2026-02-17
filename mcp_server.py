@@ -2,7 +2,8 @@
 """MCP server exposing company matching as agentic tools.
 
 Tools:
-  - inspect_csv: Examine a CSV file's structure (columns, row count, samples)
+  - inspect_file: Examine a CSV or Excel file's structure
+  - prepare_csv: Extract columns from Excel/CSV into a clean matching-ready CSV
   - match_companies: Run the two-pass matching pipeline (exact + embedding)
   - analyze_results: Compute statistics from a completed match output CSV
 
@@ -29,49 +30,218 @@ import match_companies as mc
 mcp = FastMCP(
     "company-matcher",
     instructions=(
-        "You are a company matching assistant. Use inspect_csv to understand "
-        "the user's data, match_companies to run the matching, and "
-        "analyze_results to evaluate the output. Iterate on the threshold "
-        "if too many results need review."
+        "You are a company matching assistant. Users often provide raw Excel "
+        "files with many columns. Start with inspect_file to understand the "
+        "data, then use prepare_csv to extract the company name and ID columns "
+        "into clean CSVs. Then run match_companies and analyze_results. "
+        "Iterate on the threshold if too many results need review."
     ),
 )
 
 
-@mcp.tool()
-def inspect_csv(file_path: str, sample_rows: int = 5) -> str:
-    """Examine a CSV file and return its structure.
+def _is_excel(path: str) -> bool:
+    return path.lower().endswith((".xlsx", ".xls", ".xlsm"))
 
-    Returns column names, total row count, and a sample of rows
-    so you can determine which column contains company names and
-    choose the right parameters for matching.
+
+def _read_excel_sheet(path: str, sheet: str = None) -> tuple:
+    """Read an Excel sheet, return (rows_as_dicts, column_names).
+
+    Handles common messiness: skips fully blank rows, strips whitespace
+    from headers and values.
+    """
+    import openpyxl
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    ws = wb[sheet] if sheet else wb.active
+
+    raw_rows = list(ws.iter_rows(values_only=True))
+    wb.close()
+    if not raw_rows:
+        return [], []
+
+    # Find the header row: first row that has at least 2 non-empty cells
+    header_idx = 0
+    for i, row in enumerate(raw_rows):
+        non_empty = sum(1 for c in row if c is not None and str(c).strip())
+        if non_empty >= 2:
+            header_idx = i
+            break
+
+    headers = [str(c).strip() if c is not None else f"col_{j}"
+               for j, c in enumerate(raw_rows[header_idx])]
+
+    # Deduplicate header names
+    seen = {}
+    deduped = []
+    for h in headers:
+        if h in seen:
+            seen[h] += 1
+            deduped.append(f"{h}_{seen[h]}")
+        else:
+            seen[h] = 0
+            deduped.append(h)
+    headers = deduped
+
+    rows = []
+    for row in raw_rows[header_idx + 1:]:
+        # Skip fully blank rows
+        if all(c is None or str(c).strip() == "" for c in row):
+            continue
+        d = {}
+        for j, h in enumerate(headers):
+            val = row[j] if j < len(row) else None
+            d[h] = str(val).strip() if val is not None else ""
+        rows.append(d)
+
+    return rows, headers
+
+
+@mcp.tool()
+def inspect_file(file_path: str, sheet: str = "", sample_rows: int = 5) -> str:
+    """Examine a CSV or Excel file and return its structure.
+
+    Returns column names, total row count, and a sample of rows so you
+    can determine which columns contain company names and IDs. For Excel
+    files, also lists available sheet names.
+
+    Call this first before prepare_csv or match_companies.
 
     Args:
-        file_path: Path to the CSV file.
+        file_path: Path to a CSV or Excel (.xlsx/.xls/.xlsm) file.
+        sheet: Sheet name for Excel files (default: active sheet).
         sample_rows: Number of sample rows to include (default 5).
     """
     if not os.path.exists(file_path):
         return json.dumps({"error": f"File not found: {file_path}"})
 
-    rows = mc.read_csv(file_path)
-    if not rows:
-        return json.dumps({"error": "CSV is empty or has no data rows"})
+    result = {"file": file_path}
 
-    columns = list(rows[0].keys())
-    samples = rows[:sample_rows]
+    if _is_excel(file_path):
+        import openpyxl
+        wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+        result["sheets"] = wb.sheetnames
+        result["active_sheet"] = sheet or wb.active.title
+        wb.close()
+
+        rows, columns = _read_excel_sheet(file_path, sheet=sheet or None)
+    else:
+        rows = mc.read_csv(file_path)
+        columns = list(rows[0].keys()) if rows else []
+
+    if not rows:
+        result["error"] = "File is empty or has no data rows"
+        return json.dumps(result, indent=2)
+
+    result["columns"] = columns
+    result["row_count"] = len(rows)
+    result["sample_rows"] = rows[:sample_rows]
 
     # Guess which column is the company name column
     company_col_candidates = []
+    id_col_candidates = []
     for col in columns:
         lower = col.lower().replace("_", " ").replace("-", " ")
-        if any(kw in lower for kw in ["company", "name", "organization", "org", "account"]):
+        if any(kw in lower for kw in ["company", "organization", "org name",
+                                       "business", "firm", "vendor", "supplier",
+                                       "employer", "exhibitor", "attendee"]):
             company_col_candidates.append(col)
+        elif "name" in lower and "first" not in lower and "last" not in lower:
+            company_col_candidates.append(col)
+        if any(kw in lower for kw in ["id", "crm", "sf id",
+                                       "salesforce", "hubspot"]):
+            id_col_candidates.append(col)
+        elif "account" in lower and "name" not in lower:
+            id_col_candidates.append(col)
+
+    result["likely_company_columns"] = company_col_candidates
+    result["likely_id_columns"] = id_col_candidates
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def prepare_csv(
+    input_path: str,
+    company_column: str,
+    output_path: str,
+    id_column: str = "",
+    sheet: str = "",
+    deduplicate: bool = True,
+) -> str:
+    """Extract company names (and optional IDs) from an Excel or CSV file
+    into a clean CSV ready for matching.
+
+    Use this when the input file is a messy Excel with many columns, or
+    when column names don't match what match_companies expects. The output
+    CSV will have standardized column names ('company' and optionally
+    'account_id').
+
+    Args:
+        input_path: Path to the source Excel or CSV file.
+        company_column: Name of the column containing company names.
+        output_path: Where to write the clean CSV.
+        id_column: Optional column to carry through as 'account_id'.
+        sheet: Sheet name for Excel files (default: active sheet).
+        deduplicate: Remove duplicate company names (default true).
+    """
+    if not os.path.exists(input_path):
+        return json.dumps({"error": f"File not found: {input_path}"})
+
+    if _is_excel(input_path):
+        rows, columns = _read_excel_sheet(input_path, sheet=sheet or None)
+    else:
+        rows = mc.read_csv(input_path)
+        columns = list(rows[0].keys()) if rows else []
+
+    if not rows:
+        return json.dumps({"error": "Input file is empty"})
+
+    if company_column not in columns:
+        return json.dumps({
+            "error": f"Column '{company_column}' not found",
+            "available_columns": columns,
+        })
+
+    if id_column and id_column not in columns:
+        return json.dumps({
+            "error": f"ID column '{id_column}' not found",
+            "available_columns": columns,
+        })
+
+    # Extract and clean
+    seen = set()
+    clean_rows = []
+    skipped_blank = 0
+    skipped_dupe = 0
+
+    for r in rows:
+        name = r.get(company_column, "").strip()
+        if not name:
+            skipped_blank += 1
+            continue
+
+        if deduplicate:
+            key = mc.canonicalize(name)
+            if key in seen:
+                skipped_dupe += 1
+                continue
+            seen.add(key)
+
+        out_row = {"company": name}
+        if id_column:
+            out_row["account_id"] = r.get(id_column, "").strip()
+        clean_rows.append(out_row)
+
+    # Write clean CSV
+    fieldnames = ["company", "account_id"] if id_column else ["company"]
+    mc.write_csv(output_path, clean_rows, fieldnames)
 
     return json.dumps({
-        "file": file_path,
-        "columns": columns,
-        "row_count": len(rows),
-        "sample_rows": samples,
-        "likely_company_columns": company_col_candidates,
+        "output_file": output_path,
+        "rows_written": len(clean_rows),
+        "rows_skipped_blank": skipped_blank,
+        "rows_skipped_duplicate": skipped_dupe,
+        "columns": fieldnames,
+        "sample": clean_rows[:3],
     }, indent=2)
 
 

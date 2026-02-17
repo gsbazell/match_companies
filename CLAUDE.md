@@ -66,7 +66,8 @@ Override column names with `--source-col`, `--target-col`, `--source-id-col`, an
 The project includes an MCP server (`mcp_server.py`) that exposes company matching as tools for AI agents. This works with Claude Code, Cursor, Codex, and any MCP-compatible agent.
 
 ### Tools Provided
-- **`inspect_csv`** - Examine a CSV file's structure (columns, row count, sample data, guessed company column)
+- **`inspect_file`** - Examine a CSV or Excel file's structure (sheets, columns, row count, sample data, guessed company/ID columns)
+- **`prepare_csv`** - Extract company name and ID columns from a messy Excel or CSV into a clean matching-ready CSV (handles dedup, blank rows, column renaming)
 - **`match_companies`** - Run the full two-pass matching pipeline and return results + statistics
 - **`analyze_results`** - Compute statistics from a completed match output, including threshold tuning suggestions
 
@@ -75,7 +76,8 @@ The server is registered in `.mcp.json` at the project root. For Claude Code, it
 
 ### Agentic Workflow
 An agent using these tools should:
-1. Call `inspect_csv` on both input files to understand structure
-2. Call `match_companies` with appropriate column names and threshold
-3. Call `analyze_results` to evaluate match quality
-4. If too many `review_needed`, adjust threshold and re-run (embeddings are cached, so re-runs are fast)
+1. Call `inspect_file` on both input files to understand structure (columns, sheets for Excel, likely company/ID columns)
+2. Call `prepare_csv` to extract the relevant columns into clean CSVs with standardized names
+3. Call `match_companies` with the prepared CSVs
+4. Call `analyze_results` to evaluate match quality
+5. If too many `review_needed`, adjust threshold and re-run (embeddings are cached, so re-runs are fast)
