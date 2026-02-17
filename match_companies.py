@@ -127,6 +127,40 @@ def write_csv(path: str, rows: List[Dict[str, str]], fieldnames: List[str]):
         for r in rows:
             w.writerow(r)
 
+
+def load_dotenv(path: str = ".env") -> None:
+    """Load key=value entries from a local .env file into os.environ.
+
+    Existing environment values are preserved.
+    """
+    if not os.path.exists(path):
+        return
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+
+                if key and key not in os.environ:
+                    os.environ[key] = value
+    except Exception as e:
+        print(f"Warning: could not load {path}: {e}", file=sys.stderr)
+
+
+def resolve_api_key(cli_api_key: str = "") -> str:
+    """Resolve API key from CLI flag, env vars, or local .env."""
+    if cli_api_key:
+        return cli_api_key
+
+    load_dotenv()
+    return (os.getenv("OPENAI_API_KEY") or "").strip()
+
 class EmbeddingCache:
     """Simple JSON cache on disk keyed by (model, text hash)."""
     def __init__(self, path="emb_cache.json", model="text-embedding-3-small"):
@@ -244,6 +278,7 @@ def main():
     p.add_argument("--topk", type=int, default=3, help="How many candidates to show per source company")
     p.add_argument("--cache", default="emb_cache.json", help="Path to local embedding cache")
     p.add_argument("--batch-size", type=int, default=128, help="Embedding batch size")
+    p.add_argument("--api-key", default="", help="OpenAI API key (overrides OPENAI_API_KEY env var)")
 
     # Target account ID column
     p.add_argument("--target-id-col", default="account_id", help="Column in target CSV with the unique account ID (default: account_id)")
@@ -254,6 +289,7 @@ def main():
     args = p.parse_args()
     id_col = args.target_id_col
     source_id_col = args.source_id_col
+    api_key = resolve_api_key(args.api_key)
 
     # --- Load and normalize input data ---
     source_rows = normalize_rows(read_csv(args.source), args.source_col)
@@ -292,7 +328,13 @@ def main():
 
     # --- Pass 2: embedding-based matches for unresolved rows ---
     if unresolved:
-        client = OpenAI()  # uses OPENAI_API_KEY from your environment
+        if not api_key:
+            raise SystemExit(
+                "OpenAI API key not found. Set OPENAI_API_KEY, add it to a local .env file, "
+                "or pass --api-key."
+            )
+
+        client = OpenAI(api_key=api_key)
         cache = EmbeddingCache(args.cache, model=args.model)
 
         # Collect display names (original strings) for unresolved source rows
