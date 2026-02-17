@@ -47,9 +47,13 @@ XYZ Industries Inc.,ATT-002
 ```
 
 ### Target CSV
-Must have columns for company names and account IDs:
-- Company names (default: `company`)
-- Account IDs (default: `account_id`)
+Must have a company-name column (default: `company`).
+
+Account IDs are optional metadata:
+- Target ID column (default name: `account_id`, configurable via `--target-id-col`)
+- Source ID column (set via `--source-id-col`)
+
+If ID columns are not present, output fields `source_account_id` and `target_account_id` are left blank.
 
 Example:
 ```csv
@@ -65,9 +69,9 @@ XYZ Industries,ACC-002
 The script generates a CSV with these columns:
 
 - `source_company` - Original source company name
-- `source_account_id` - Source account ID (if provided via `--source-id-col`)
+- `source_account_id` - Source account ID (optional metadata; blank if `--source-id-col` is not provided or missing)
 - `target_company` - Matched target company name
-- `target_account_id` - Target account ID
+- `target_account_id` - Target account ID (optional metadata; blank if `--target-id-col` is not present in the target CSV)
 - `similarity` - Match confidence (0-1, or 1.0 for exact matches)
 - `match_type` - One of:
   - `exact_canonical` - Exact match after canonicalization
@@ -89,8 +93,8 @@ The script generates a CSV with these columns:
 --model NAME         OpenAI model (default: text-embedding-3-small)
 --source-col NAME    Source company column (default: company)
 --target-col NAME    Target company column (default: company)
---source-id-col NAME Source account ID column (optional)
---target-id-col NAME Target account ID column (default: account_id)
+--source-id-col NAME Optional source metadata ID column
+--target-id-col NAME Optional target metadata ID column (default: account_id)
 --cache FILE         Embedding cache path (default: emb_cache.json)
 --batch-size INT     API batch size (default: 128)
 --api-key KEY        OpenAI API key (overrides OPENAI_API_KEY)
