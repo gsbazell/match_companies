@@ -139,6 +139,43 @@ python match_companies.py \
   --threshold 0.85
 ```
 
+## MCP Server (Agentic Skill)
+
+An MCP server (`mcp_server.py`) exposes this tool to AI agents like Claude Code, Cursor, Codex, and any MCP-compatible client. Agents can inspect files, prepare data, run matching, and analyze results autonomously.
+
+### Install
+
+```bash
+pip install -r requirements-mcp.txt
+```
+
+### Tools
+
+| Tool | Description |
+|------|-------------|
+| `inspect_file` | Examine a CSV or Excel file — columns, row count, sheet names, sample data, and guessed company/ID columns |
+| `prepare_csv` | Extract company name and ID columns from a messy Excel or CSV into a clean matching-ready CSV (handles dedup, blank rows, column renaming) |
+| `match_companies` | Run the full two-pass matching pipeline and return results with statistics |
+| `analyze_results` | Compute statistics from a completed match output, with threshold tuning suggestions |
+
+### Register with Claude Code
+
+The server is registered in `.mcp.json` at the project root and auto-discovers on session start. To add it manually:
+
+```bash
+claude mcp add --transport stdio company-matcher -- python mcp_server.py
+```
+
+### Agentic Workflow
+
+An agent using these tools follows this loop:
+
+1. **`inspect_file`** on both input files — understand columns, sheets (for Excel), likely company/ID columns
+2. **`prepare_csv`** to extract relevant columns into clean CSVs with standardized names
+3. **`match_companies`** with the prepared CSVs
+4. **`analyze_results`** to evaluate match quality
+5. Adjust threshold and re-run if too many `review_needed` (embeddings are cached, so re-runs are fast)
+
 ## Troubleshooting
 
 **"OpenAI API key not found"**
