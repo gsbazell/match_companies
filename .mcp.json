@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "company-matcher": {
+      "command": "python",
+      "args": ["mcp_server.py"],
+      "env": {
+        "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+      }
+    }
+  }
+}

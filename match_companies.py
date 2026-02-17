@@ -299,56 +299,43 @@ def topk_similar(
     top_sims = np.take_along_axis(part_sims, order, axis=1)
     return top_idx, top_sims
 
-def main():
-    """CLI entry point: parse args, run matching, write results."""
-    p = argparse.ArgumentParser(description="Match companies from two lists using OpenAI embeddings.")
-    # Required paths for the two CSVs
-    p.add_argument("--source", required=True, help="CSV with source companies to match")
-    p.add_argument("--target", required=True, help="CSV with target companies to match against")
+def run_matching(
+    source_rows: List[Dict[str, str]],
+    target_rows: List[Dict[str, str]],
+    source_col: str = "company",
+    target_col: str = "company",
+    source_id_col: str = "",
+    target_id_col: str = "account_id",
+    threshold: float = 0.82,
+    topk: int = 3,
+    model: str = "text-embedding-3-small",
+    cache_path: str = "emb_cache.json",
+    batch_size: int = 128,
+    api_key: str = "",
+) -> List[Dict[str, str]]:
+    """Core matching logic. Returns a list of match result dicts.
 
-    # Column names if they aren't the default `company`
-    p.add_argument("--source-col", default="company", help="Column name in source CSV (default: company)")
-    p.add_argument("--target-col", default="company", help="Column name in target CSV (default: company)")
+    Each result dict has keys: source_company, source_account_id,
+    target_company, target_account_id, similarity, match_type, alt_candidates.
+    """
+    id_col = target_id_col
 
-    # Embedding model + knobs
-    p.add_argument("--model", default="text-embedding-3-small", help="OpenAI embedding model")
-    p.add_argument("--output", default="matches.csv", help="Output CSV path")
-    p.add_argument("--threshold", type=float, default=0.82, help="Cosine similarity threshold to accept a match")
-    p.add_argument("--topk", type=int, default=3, help="How many candidates to show per source company")
-    p.add_argument("--cache", default="emb_cache.json", help="Path to local embedding cache")
-    p.add_argument("--batch-size", type=int, default=128, help="Embedding batch size")
-    p.add_argument("--api-key", default="", help="OpenAI API key (overrides OPENAI_API_KEY env var)")
-
-    # Target account ID column (optional metadata)
-    p.add_argument("--target-id-col", default="account_id", help="Optional metadata ID column in target CSV (default: account_id); output is blank when absent")
-
-    # Source account ID column (optional metadata)
-    p.add_argument("--source-id-col", default="", help="Optional metadata ID column in source CSV; output is blank when absent")
-
-    args = p.parse_args()
-    id_col = args.target_id_col
-    source_id_col = args.source_id_col
-    api_key = resolve_api_key(args.api_key)
-
-    # --- Load and normalize input data ---
-    source_rows = normalize_rows(read_csv(args.source), args.source_col)
-    target_rows = normalize_rows(read_csv(args.target), args.target_col)
+    # Normalize rows (adds _raw_name and _canon fields)
+    source_rows = normalize_rows(source_rows, source_col)
+    target_rows = normalize_rows(target_rows, target_col)
 
     # --- Pass 1: exact canonical matches ---
-    # Build an index from canonical name → list of target rows that share it.
     canon_to_target: Dict[str, List[Dict[str, str]]] = {}
     for r in target_rows:
         canon_to_target.setdefault(r["_canon"], []).append(r)
 
     results: List[Dict[str, str]] = []
-    unresolved: List[int] = []  # indexes of source rows to process in the embedding pass
+    unresolved: List[int] = []
 
     for i, r in enumerate(source_rows):
         c = r["_canon"]
         exacts = canon_to_target.get(c, [])
         if c and exacts:
-            # If multiple target rows share the same canonical, accept the first and
-            # record the rest as alternatives for human review.
             best = exacts[0]
             results.append({
                 "source_company": r["_raw_name"],
@@ -367,40 +354,36 @@ def main():
 
     # --- Pass 2: embedding-based matches for unresolved rows ---
     if unresolved:
-        if not api_key:
+        resolved_key = api_key or resolve_api_key()
+        if not resolved_key:
             raise SystemExit(
                 "OpenAI API key not found. Set OPENAI_API_KEY, add it to a local .env file, "
                 "or pass --api-key."
             )
 
-        client = OpenAI(api_key=api_key)
-        cache = EmbeddingCache(args.cache, model=args.model)
+        client = OpenAI(api_key=resolved_key)
+        cache = EmbeddingCache(cache_path, model=model)
 
-        # Collect display names (original strings) for unresolved source rows
         source_unres_names = [source_rows[i]["_raw_name"] for i in unresolved]
         target_names = [r["_raw_name"] for r in target_rows]
 
-        # Convert names → alias strings → embeddings
         source_queries = make_queries(source_unres_names)
         target_queries = make_queries(target_names)
 
-        Q = embed_texts(source_queries, client, cache, batch_size=args.batch_size)  # Nq x d
-        X = embed_texts(target_queries, client, cache, batch_size=args.batch_size)  # Nx x d
+        Q = embed_texts(source_queries, client, cache, batch_size=batch_size)
+        X = embed_texts(target_queries, client, cache, batch_size=batch_size)
 
-        # For each source query, retrieve the top-k target candidates + scores
-        top_idx, top_sims = topk_similar(Q, X, k=args.topk)
+        top_idx, top_sims = topk_similar(Q, X, k=topk)
 
-        # Walk each row's candidates and apply the acceptance threshold
         for row_i, (cand_idxs, cand_sims) in enumerate(zip(top_idx, top_sims)):
             source_idx = unresolved[row_i]
             source_row = source_rows[source_idx]
-            added = False  # whether we've accepted a candidate above threshold
+            added = False
             alts: List[str] = []
 
             for j, sim in zip(cand_idxs, cand_sims):
                 target_row = target_rows[int(j)]
-                if not added and sim >= args.threshold:
-                    # Accept the first candidate that clears the threshold
+                if not added and sim >= threshold:
                     results.append({
                         "source_company": source_row["_raw_name"],
                         "source_account_id": source_row.get(source_id_col, "") if source_id_col else "",
@@ -412,14 +395,11 @@ def main():
                     })
                     added = True
                 else:
-                    # Keep other candidates (and sub-threshold ones) as alternates
                     id_val = target_row.get(id_col, "")
                     id_sfx = f" [{id_val}]" if id_val else ""
                     alts.append(f"{target_row['_raw_name']}{id_sfx} ({sim:.4f})")
 
             if not added:
-                # No candidate cleared the threshold. We still record the top-1
-                # so you have something to review manually.
                 top1 = target_rows[int(cand_idxs[0])]
                 results.append({
                     "source_company": source_row["_raw_name"],
@@ -431,14 +411,79 @@ def main():
                     "alt_candidates": "; ".join(alts[1:]) if len(alts) > 1 else "",
                 })
 
-    # --- Output: sort for readability and write CSV ---
+    # Sort for readability
     order = {"exact_canonical": 0, "embedding": 1, "review_needed": 2}
     results.sort(key=lambda r: (order.get(r["match_type"], 9), -r["similarity"]))
+    return results
 
-    fields = ["source_company", "source_account_id", "target_company", "target_account_id", "similarity", "match_type", "alt_candidates"]
-    write_csv(args.output, results, fields)
 
-    # Log a quick summary to stdout
+RESULT_FIELDS = ["source_company", "source_account_id", "target_company",
+                 "target_account_id", "similarity", "match_type", "alt_candidates"]
+
+
+def compute_stats(results: List[Dict[str, str]], threshold: float = 0.82) -> Dict:
+    """Compute summary statistics from match results."""
+    import collections
+    type_counts = collections.Counter(r["match_type"] for r in results)
+    emb_sims = [float(r["similarity"]) for r in results if r["match_type"] == "embedding"]
+    rev_sims = [float(r["similarity"]) for r in results if r["match_type"] == "review_needed"]
+    return {
+        "total_matched": len(results),
+        "by_type": dict(type_counts),
+        "threshold": threshold,
+        "embedding_similarity": {
+            "mean": round(sum(emb_sims) / len(emb_sims), 4) if emb_sims else None,
+            "min": round(min(emb_sims), 4) if emb_sims else None,
+            "max": round(max(emb_sims), 4) if emb_sims else None,
+        },
+        "review_similarity": {
+            "mean": round(sum(rev_sims) / len(rev_sims), 4) if rev_sims else None,
+            "min": round(min(rev_sims), 4) if rev_sims else None,
+            "max": round(max(rev_sims), 4) if rev_sims else None,
+        },
+    }
+
+
+def main():
+    """CLI entry point: parse args, run matching, write results."""
+    p = argparse.ArgumentParser(description="Match companies from two lists using OpenAI embeddings.")
+    p.add_argument("--source", required=True, help="CSV with source companies to match")
+    p.add_argument("--target", required=True, help="CSV with target companies to match against")
+    p.add_argument("--source-col", default="company", help="Column name in source CSV (default: company)")
+    p.add_argument("--target-col", default="company", help="Column name in target CSV (default: company)")
+    p.add_argument("--model", default="text-embedding-3-small", help="OpenAI embedding model")
+    p.add_argument("--output", default="matches.csv", help="Output CSV path")
+    p.add_argument("--threshold", type=float, default=0.82, help="Cosine similarity threshold to accept a match")
+    p.add_argument("--topk", type=int, default=3, help="How many candidates to show per source company")
+    p.add_argument("--cache", default="emb_cache.json", help="Path to local embedding cache")
+    p.add_argument("--batch-size", type=int, default=128, help="Embedding batch size")
+    p.add_argument("--api-key", default="", help="OpenAI API key (overrides OPENAI_API_KEY env var)")
+    p.add_argument("--target-id-col", default="account_id", help="Optional metadata ID column in target CSV (default: account_id); output is blank when absent")
+    p.add_argument("--source-id-col", default="", help="Optional metadata ID column in source CSV; output is blank when absent")
+
+    args = p.parse_args()
+    api_key = resolve_api_key(args.api_key)
+
+    source_rows = read_csv(args.source)
+    target_rows = read_csv(args.target)
+
+    results = run_matching(
+        source_rows=source_rows,
+        target_rows=target_rows,
+        source_col=args.source_col,
+        target_col=args.target_col,
+        source_id_col=args.source_id_col,
+        target_id_col=args.target_id_col,
+        threshold=args.threshold,
+        topk=args.topk,
+        model=args.model,
+        cache_path=args.cache,
+        batch_size=args.batch_size,
+        api_key=api_key,
+    )
+
+    write_csv(args.output, results, RESULT_FIELDS)
+
     print(f"Wrote {len(results)} rows to {args.output}")
     unmatched = sum(1 for r in results if r["match_type"] == "review_needed")
     print(f"{unmatched} need review (below threshold {args.threshold}).")
