@@ -25,8 +25,9 @@ Typical usage (one-liner):
 CSV expectations:
 - Both files should have a column with the company name (default column name:
   `company`). You can override with `--source-col` and `--target-col`.
-  The target CSV should also have a column with the account id (default column name:
-  'account_id')
+- `--source-id-col` and `--target-id-col` are optional metadata columns.
+  If an ID column is absent, output `source_account_id` / `target_account_id`
+  is left blank.
 
 Notes:
 - The script caches embeddings in `emb_cache.json` so you only pay for new rows.
@@ -280,11 +281,11 @@ def main():
     p.add_argument("--batch-size", type=int, default=128, help="Embedding batch size")
     p.add_argument("--api-key", default="", help="OpenAI API key (overrides OPENAI_API_KEY env var)")
 
-    # Target account ID column
-    p.add_argument("--target-id-col", default="account_id", help="Column in target CSV with the unique account ID (default: account_id)")
+    # Target account ID column (optional metadata)
+    p.add_argument("--target-id-col", default="account_id", help="Optional metadata ID column in target CSV (default: account_id); output is blank when absent")
 
-    # Source account ID column (optional)
-    p.add_argument("--source-id-col", default="", help="Column in source CSV with unique source ID (optional)")
+    # Source account ID column (optional metadata)
+    p.add_argument("--source-id-col", default="", help="Optional metadata ID column in source CSV; output is blank when absent")
 
     args = p.parse_args()
     id_col = args.target_id_col
