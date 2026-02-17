@@ -325,17 +325,20 @@ def run_matching(
     target_rows = normalize_rows(target_rows, target_col)
 
     # --- Pass 1: exact canonical matches ---
+    # Build an index from canonical name → list of target rows that share it.
     canon_to_target: Dict[str, List[Dict[str, str]]] = {}
     for r in target_rows:
         canon_to_target.setdefault(r["_canon"], []).append(r)
 
     results: List[Dict[str, str]] = []
-    unresolved: List[int] = []
+    unresolved: List[int] = []  # indexes of source rows to process in the embedding pass
 
     for i, r in enumerate(source_rows):
         c = r["_canon"]
         exacts = canon_to_target.get(c, [])
         if c and exacts:
+            # If multiple target rows share the same canonical, accept the first and
+            # record the rest as alternatives for human review.
             best = exacts[0]
             results.append({
                 "source_company": r["_raw_name"],
@@ -364,26 +367,31 @@ def run_matching(
         client = OpenAI(api_key=resolved_key)
         cache = EmbeddingCache(cache_path, model=model)
 
+        # Collect display names (original strings) for unresolved source rows
         source_unres_names = [source_rows[i]["_raw_name"] for i in unresolved]
         target_names = [r["_raw_name"] for r in target_rows]
 
+        # Convert names → alias strings → embeddings
         source_queries = make_queries(source_unres_names)
         target_queries = make_queries(target_names)
 
-        Q = embed_texts(source_queries, client, cache, batch_size=batch_size)
-        X = embed_texts(target_queries, client, cache, batch_size=batch_size)
+        Q = embed_texts(source_queries, client, cache, batch_size=batch_size)  # Nq x d
+        X = embed_texts(target_queries, client, cache, batch_size=batch_size)  # Nx x d
 
+        # For each source query, retrieve the top-k target candidates + scores
         top_idx, top_sims = topk_similar(Q, X, k=topk)
 
+        # Walk each row's candidates and apply the acceptance threshold
         for row_i, (cand_idxs, cand_sims) in enumerate(zip(top_idx, top_sims)):
             source_idx = unresolved[row_i]
             source_row = source_rows[source_idx]
-            added = False
+            added = False  # whether we've accepted a candidate above threshold
             alts: List[str] = []
 
             for j, sim in zip(cand_idxs, cand_sims):
                 target_row = target_rows[int(j)]
                 if not added and sim >= threshold:
+                    # Accept the first candidate that clears the threshold
                     results.append({
                         "source_company": source_row["_raw_name"],
                         "source_account_id": source_row.get(source_id_col, "") if source_id_col else "",
@@ -395,11 +403,14 @@ def run_matching(
                     })
                     added = True
                 else:
+                    # Keep other candidates (and sub-threshold ones) as alternates
                     id_val = target_row.get(id_col, "")
                     id_sfx = f" [{id_val}]" if id_val else ""
                     alts.append(f"{target_row['_raw_name']}{id_sfx} ({sim:.4f})")
 
             if not added:
+                # No candidate cleared the threshold. We still record the top-1
+                # so you have something to review manually.
                 top1 = target_rows[int(cand_idxs[0])]
                 results.append({
                     "source_company": source_row["_raw_name"],
