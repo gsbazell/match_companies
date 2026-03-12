@@ -5,3 +5,4 @@ Unidecode>=1.3.0  # Optional but recommended for accent handling
 numpy
 openai
 Unidecode
+flask

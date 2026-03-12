@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Company Match — Sana Commerce</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Reset & base ─────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --heart:    #EB0F37;
+      --heart-h:  #C20030;
+      --indigo:   #12123F;
+      --azure:    #5664F9;
+      --cobalt:   #222277;
+      --midnight: #000027;
+      --oatmeal:  #F4F3F0;
+      --oat200:   #E8E6E3;
+      --oat300:   #D6D5D1;
+      --oat500:   #595854;
+      --white:    #FFFFFF;
+      --radius:   10px;
+      --shadow:   0 2px 12px rgba(18,18,63,.10);
+    }
+
+    html { font-size: 16px; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--oatmeal);
+      color: var(--indigo);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ─────────────────────────────────── */
+    header {
+      background: var(--indigo);
+      background-image:
+        radial-gradient(ellipse 80% 120% at 90% -10%, rgba(235,15,55,.40) 0%, transparent 60%),
+        linear-gradient(135deg, var(--indigo) 0%, var(--cobalt) 55%, var(--indigo) 100%);
+      padding: 40px 48px 44px;
+      position: relative;
+      overflow: hidden;
+    }
+    header::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 50% 80% at 10% 120%, rgba(86,100,249,.25) 0%, transparent 60%);
+    }
+    .header-inner {
+      position: relative;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .logomark {
+      width: 36px;
+      height: 36px;
+      flex-shrink: 0;
+    }
+    .brand-name {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,.55);
+    }
+    header h1 {
+      font-size: 48px;
+      font-weight: 700;
+      line-height: 1.15;
+      letter-spacing: -0.01em;
+      color: var(--white);
+      margin-bottom: 12px;
+    }
+    header h1 span { color: var(--heart); }
+    header p {
+      font-size: 17px;
+      line-height: 1.6;
+      color: rgba(255,255,255,.65);
+      max-width: 560px;
+    }
+
+    /* ── Main layout ─────────────────────────────── */
+    main {
+      flex: 1;
+      max-width: 960px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 40px 24px 64px;
+    }
+
+    /* ── Section label ───────────────────────────── */
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .10em;
+      text-transform: uppercase;
+      color: var(--oat500);
+      margin-bottom: 14px;
+    }
+
+    /* ── Upload grid ─────────────────────────────── */
+    .upload-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 28px;
+    }
+    @media (max-width: 600px) {
+      .upload-grid { grid-template-columns: 1fr; }
+    }
+
+    .upload-card {
+      background: var(--white);
+      border: 2px dashed var(--oat300);
+      border-radius: var(--radius);
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .18s, background .18s, box-shadow .18s;
+      position: relative;
+    }
+    .upload-card:hover, .upload-card.dragover {
+      border-color: var(--azure);
+      background: rgba(86,100,249,.04);
+      box-shadow: 0 0 0 3px rgba(86,100,249,.12);
+    }
+    .upload-card.has-file {
+      border-color: var(--azure);
+      border-style: solid;
+      background: rgba(86,100,249,.04);
+    }
+    .upload-card input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+    .upload-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--oatmeal);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+      transition: background .18s;
+    }
+    .upload-card:hover .upload-icon,
+    .upload-card.has-file .upload-icon {
+      background: rgba(86,100,249,.12);
+    }
+    .upload-icon svg { stroke: var(--azure); }
+    .upload-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--indigo);
+      margin-bottom: 4px;
+    }
+    .upload-sub {
+      font-size: 13px;
+      color: var(--oat500);
+      line-height: 1.4;
+    }
+    .upload-filename {
+      margin-top: 12px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--azure);
+      word-break: break-all;
+      display: none;
+    }
+    .upload-card.has-file .upload-filename { display: block; }
+    .upload-card.has-file .upload-sub { display: none; }
+
+    /* ── Settings card ───────────────────────────── */
+    .settings-card {
+      background: var(--white);
+      border: 1px solid var(--oat200);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      margin-bottom: 28px;
+      overflow: hidden;
+    }
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 24px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .settings-header:hover { background: var(--oatmeal); }
+    .settings-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .settings-header-left svg { stroke: var(--indigo); }
+    .settings-header h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--indigo);
+    }
+    .settings-toggle svg {
+      stroke: var(--oat500);
+      transition: transform .2s;
+    }
+    .settings-toggle.open svg { transform: rotate(180deg); }
+
+    .settings-body {
+      padding: 0 24px 24px;
+      border-top: 1px solid var(--oat200);
+      display: none;
+    }
+    .settings-body.open { display: block; }
+
+    .settings-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px 20px;
+      padding-top: 20px;
+    }
+    @media (max-width: 700px) {
+      .settings-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 450px) {
+      .settings-grid { grid-template-columns: 1fr; }
+    }
+
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--oat500);
+      letter-spacing: .03em;
+      text-transform: uppercase;
+    }
+    .field input, .field select {
+      font-family: inherit;
+      font-size: 14px;
+      color: var(--indigo);
+      background: var(--white);
+      border: 1.5px solid var(--oat300);
+      border-radius: 7px;
+      padding: 9px 12px;
+      transition: border-color .15s, box-shadow .15s;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .field input:focus, .field select:focus {
+      border-color: var(--azure);
+      box-shadow: 0 0 0 3px rgba(86,100,249,.15);
+    }
+    .field-hint {
+      font-size: 11px;
+      color: var(--oat500);
+      line-height: 1.4;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid var(--oat200);
+      margin: 20px 0;
+    }
+
+    /* ── API key section ─────────────────────────── */
+    .api-section {
+      background: var(--white);
+      border: 1px solid var(--oat200);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px 24px;
+      margin-bottom: 28px;
+    }
+    .api-section h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--indigo);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .api-section p {
+      font-size: 13px;
+      color: var(--oat500);
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+    .api-section input {
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      color: var(--indigo);
+      background: var(--oatmeal);
+      border: 1.5px solid var(--oat300);
+      border-radius: 7px;
+      padding: 10px 14px;
+      width: 100%;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .api-section input:focus {
+      border-color: var(--azure);
+      box-shadow: 0 0 0 3px rgba(86,100,249,.15);
+      background: var(--white);
+    }
+
+    /* ── Run button ──────────────────────────────── */
+    .run-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .btn-run {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--heart);
+      color: var(--white);
+      border: none;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 600;
+      padding: 14px 32px;
+      cursor: pointer;
+      transition: background .18s, transform .12s, box-shadow .18s;
+      box-shadow: 0 2px 8px rgba(235,15,55,.30);
+      white-space: nowrap;
+    }
+    .btn-run:hover:not(:disabled) {
+      background: var(--heart-h);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(235,15,55,.38);
+    }
+    .btn-run:active:not(:disabled) { transform: translateY(0); }
+    .btn-run:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+    .btn-run svg { flex-shrink: 0; }
+
+    .run-hint {
+      font-size: 13px;
+      color: var(--oat500);
+      line-height: 1.4;
+    }
+
+    /* ── Progress / result ───────────────────────── */
+    #status-area { display: none; }
+
+    .progress-card {
+      background: var(--white);
+      border: 1px solid var(--oat200);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .progress-card h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--indigo);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* spinner */
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--oat300);
+      border-top-color: var(--azure);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .log-box {
+      background: var(--midnight);
+      border-radius: 8px;
+      padding: 16px 18px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      color: rgba(255,255,255,.75);
+      line-height: 1.7;
+      max-height: 220px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .log-box .log-line { display: block; }
+    .log-box .log-line::before { content: '› '; color: var(--azure); }
+
+    /* result summary */
+    .result-card {
+      background: var(--indigo);
+      background-image: linear-gradient(135deg, var(--indigo) 0%, var(--cobalt) 100%);
+      border-radius: var(--radius);
+      padding: 28px 28px 24px;
+      color: var(--white);
+    }
+    .result-card h3 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .result-card h3 svg { stroke: #6FE09A; }
+    .stat-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 600px) { .stat-row { grid-template-columns: repeat(2,1fr); } }
+    .stat-box {
+      background: rgba(255,255,255,.08);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+    .stat-box .stat-val {
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .stat-box .stat-label {
+      font-size: 12px;
+      color: rgba(255,255,255,.55);
+      font-weight: 500;
+    }
+    .stat-box.total .stat-val { color: var(--white); }
+    .stat-box.exact .stat-val { color: #6FE09A; }
+    .stat-box.embedding .stat-val { color: #A8B7FF; }
+    .stat-box.review .stat-val { color: #FFB84A; }
+
+    .btn-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--heart);
+      color: var(--white);
+      border: none;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      padding: 13px 28px;
+      cursor: pointer;
+      transition: background .18s, transform .12s;
+      box-shadow: 0 2px 10px rgba(235,15,55,.40);
+    }
+    .btn-download:hover {
+      background: var(--heart-h);
+      transform: translateY(-1px);
+    }
+
+    .error-card {
+      background: #fff0f2;
+      border: 1.5px solid #fca5b2;
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      color: #6b000f;
+    }
+    .error-card h4 {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .error-card h4 svg { stroke: var(--heart); flex-shrink: 0; }
+    .error-card p { font-size: 13px; line-height: 1.5; }
+
+    /* ── Footer ──────────────────────────────────── */
+    footer {
+      text-align: center;
+      padding: 20px 24px;
+      font-size: 12px;
+      color: var(--oat500);
+      border-top: 1px solid var(--oat200);
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────── -->
+<header>
+  <div class="header-inner">
+    <div class="brand-row">
+      <!-- Sana-inspired logomark (apostrophe-style) -->
+      <svg class="logomark" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="36" height="36" rx="8" fill="#EB0F37"/>
+        <path d="M11 10 C11 10, 11 18, 18 18 C18 18, 11 18, 11 26" stroke="white" stroke-width="3" stroke-linecap="round" fill="none"/>
+        <path d="M19 10 C19 10, 19 18, 26 18 C26 18, 19 18, 19 26" stroke="white" stroke-width="3" stroke-linecap="round" fill="none"/>
+      </svg>
+      <span class="brand-name">Sana Commerce</span>
+    </div>
+    <h1>Company <span>Match</span></h1>
+    <p>Upload two company lists, configure your settings, and let AI-powered matching do the rest. Results download automatically when complete.</p>
+  </div>
+</header>
+
+<!-- ── Main ────────────────────────────────────── -->
+<main>
+
+  <!-- Upload zone -->
+  <p class="section-label">01 — Upload your lists</p>
+  <div class="upload-grid">
+
+    <div class="upload-card" id="drop-source">
+      <input type="file" id="source-file" accept=".csv" />
+      <div class="upload-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+      </div>
+      <div class="upload-title">Source list</div>
+      <div class="upload-sub">Companies you want to match.<br/>CSV with a company name column.</div>
+      <div class="upload-filename" id="source-name"></div>
+    </div>
+
+    <div class="upload-card" id="drop-target">
+      <input type="file" id="target-file" accept=".csv" />
+      <div class="upload-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+      </div>
+      <div class="upload-title">Target list</div>
+      <div class="upload-sub">Companies to match against.<br/>CSV with a company name column.</div>
+      <div class="upload-filename" id="target-name"></div>
+    </div>
+
+  </div>
+
+  <!-- Settings -->
+  <p class="section-label">02 — Configure settings</p>
+  <div class="settings-card">
+    <div class="settings-header" id="settings-toggle">
+      <div class="settings-header-left">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        <h3>Matching settings</h3>
+      </div>
+      <div class="settings-toggle" id="chevron">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+    </div>
+    <div class="settings-body open" id="settings-body">
+      <div class="settings-grid">
+        <div class="field">
+          <label>Threshold</label>
+          <input type="number" id="threshold" value="0.82" min="0" max="1" step="0.01" />
+          <span class="field-hint">Similarity cutoff (0–1). Higher = stricter.</span>
+        </div>
+        <div class="field">
+          <label>Top candidates</label>
+          <input type="number" id="topk" value="3" min="1" max="10" step="1" />
+          <span class="field-hint">Alt. matches to show per company.</span>
+        </div>
+        <div class="field">
+          <label>Embedding model</label>
+          <select id="model">
+            <option value="text-embedding-3-small" selected>text-embedding-3-small</option>
+            <option value="text-embedding-3-large">text-embedding-3-large</option>
+            <option value="text-embedding-ada-002">text-embedding-ada-002</option>
+          </select>
+          <span class="field-hint">Larger model = higher quality, more cost.</span>
+        </div>
+
+        <hr class="divider" style="grid-column:1/-1;margin:4px 0;" />
+
+        <div class="field">
+          <label>Source column</label>
+          <input type="text" id="source-col" value="company" placeholder="company" />
+          <span class="field-hint">Company name column in source CSV.</span>
+        </div>
+        <div class="field">
+          <label>Target column</label>
+          <input type="text" id="target-col" value="company" placeholder="company" />
+          <span class="field-hint">Company name column in target CSV.</span>
+        </div>
+        <div class="field">
+          <label>Target ID column</label>
+          <input type="text" id="target-id-col" value="account_id" placeholder="account_id" />
+          <span class="field-hint">ID column in target CSV (optional).</span>
+        </div>
+        <div class="field">
+          <label>Source ID column</label>
+          <input type="text" id="source-id-col" value="" placeholder="leave blank if none" />
+          <span class="field-hint">ID column in source CSV (optional).</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- API Key -->
+  <div class="api-section">
+    <h3>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--azure)">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+      OpenAI API key
+    </h3>
+    <p>Required for semantic (embedding) matching. Leave blank to use the <code>OPENAI_API_KEY</code> environment variable if set.</p>
+    <input type="password" id="api-key" placeholder="sk-…" autocomplete="off" />
+  </div>
+
+  <!-- Run -->
+  <p class="section-label">03 — Run</p>
+  <div class="run-row">
+    <button class="btn-run" id="btn-run" disabled>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+      </svg>
+      Run matching
+    </button>
+    <span class="run-hint" id="run-hint">Upload both CSV files to get started.</span>
+  </div>
+
+  <!-- Status / result -->
+  <div id="status-area">
+
+    <div class="progress-card" id="progress-card">
+      <h3>
+        <div class="spinner" id="spinner"></div>
+        Processing…
+      </h3>
+      <div class="log-box" id="log-box"></div>
+    </div>
+
+    <div class="result-card" id="result-card" style="display:none">
+      <h3>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Matching complete
+      </h3>
+      <div class="stat-row">
+        <div class="stat-box total">
+          <div class="stat-val" id="stat-total">—</div>
+          <div class="stat-label">Total rows</div>
+        </div>
+        <div class="stat-box exact">
+          <div class="stat-val" id="stat-exact">—</div>
+          <div class="stat-label">Exact matches</div>
+        </div>
+        <div class="stat-box embedding">
+          <div class="stat-val" id="stat-embedding">—</div>
+          <div class="stat-label">Semantic matches</div>
+        </div>
+        <div class="stat-box review">
+          <div class="stat-val" id="stat-review">—</div>
+          <div class="stat-label">Need review</div>
+        </div>
+      </div>
+      <button class="btn-download" id="btn-download">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Download matches.csv
+      </button>
+    </div>
+
+    <div class="error-card" id="error-card" style="display:none">
+      <h4>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        Something went wrong
+      </h4>
+      <p id="error-msg"></p>
+    </div>
+
+  </div>
+
+</main>
+
+<footer>Sana Commerce · Company Match Tool · Creating a new future of connected commerce</footer>
+
+<script>
+  // ── File upload handling ──────────────────────────
+  const sourceInput = document.getElementById('source-file');
+  const targetInput = document.getElementById('target-file');
+  const dropSource  = document.getElementById('drop-source');
+  const dropTarget  = document.getElementById('drop-target');
+  const btnRun      = document.getElementById('btn-run');
+  const runHint     = document.getElementById('run-hint');
+
+  function setFile(card, nameEl, file) {
+    nameEl.textContent = file.name;
+    card.classList.add('has-file');
+    checkReady();
+  }
+
+  sourceInput.addEventListener('change', () => {
+    if (sourceInput.files[0]) setFile(dropSource, document.getElementById('source-name'), sourceInput.files[0]);
+  });
+  targetInput.addEventListener('change', () => {
+    if (targetInput.files[0]) setFile(dropTarget, document.getElementById('target-name'), targetInput.files[0]);
+  });
+
+  // Drag and drop
+  [dropSource, dropTarget].forEach(zone => {
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      const isSource = zone.id === 'drop-source';
+      const input = isSource ? sourceInput : targetInput;
+      const nameEl = document.getElementById(isSource ? 'source-name' : 'target-name');
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      setFile(zone, nameEl, file);
+    });
+  });
+
+  function checkReady() {
+    const ready = sourceInput.files.length > 0 && targetInput.files.length > 0;
+    btnRun.disabled = !ready;
+    runHint.textContent = ready
+      ? 'Both files loaded. Click "Run matching" to start.'
+      : (!sourceInput.files.length && !targetInput.files.length)
+        ? 'Upload both CSV files to get started.'
+        : !sourceInput.files.length
+          ? 'Upload the source list to continue.'
+          : 'Upload the target list to continue.';
+  }
+
+  // ── Settings toggle ───────────────────────────────
+  const settingsToggle = document.getElementById('settings-toggle');
+  const settingsBody   = document.getElementById('settings-body');
+  const chevron        = document.getElementById('chevron');
+
+  settingsToggle.addEventListener('click', () => {
+    const isOpen = settingsBody.classList.toggle('open');
+    chevron.classList.toggle('open', isOpen);
+  });
+
+  // ── Run ───────────────────────────────────────────
+  let currentJobId = null;
+  let pollInterval = null;
+
+  btnRun.addEventListener('click', async () => {
+    const fd = new FormData();
+    fd.append('source',        sourceInput.files[0]);
+    fd.append('target',        targetInput.files[0]);
+    fd.append('threshold',     document.getElementById('threshold').value);
+    fd.append('topk',          document.getElementById('topk').value);
+    fd.append('model',         document.getElementById('model').value);
+    fd.append('source_col',    document.getElementById('source-col').value);
+    fd.append('target_col',    document.getElementById('target-col').value);
+    fd.append('source_id_col', document.getElementById('source-id-col').value);
+    fd.append('target_id_col', document.getElementById('target-id-col').value);
+    fd.append('api_key',       document.getElementById('api-key').value);
+
+    // Reset UI
+    document.getElementById('status-area').style.display  = 'block';
+    document.getElementById('progress-card').style.display = 'block';
+    document.getElementById('result-card').style.display   = 'none';
+    document.getElementById('error-card').style.display    = 'none';
+    document.getElementById('log-box').innerHTML = '';
+    document.getElementById('spinner').style.display = 'block';
+    btnRun.disabled = true;
+
+    try {
+      const res = await fetch('/api/run', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok || data.error) { showError(data.error || 'Failed to start job.'); return; }
+      currentJobId = data.job_id;
+      pollInterval = setInterval(pollStatus, 1200);
+    } catch (err) {
+      showError('Network error: ' + err.message);
+    }
+  });
+
+  async function pollStatus() {
+    if (!currentJobId) return;
+    try {
+      const res  = await fetch('/api/status/' + currentJobId);
+      const data = await res.json();
+
+      // Update log
+      const logBox = document.getElementById('log-box');
+      logBox.innerHTML = (data.log || [])
+        .map(l => `<span class="log-line">${escHtml(l)}</span>`)
+        .join('');
+      logBox.scrollTop = logBox.scrollHeight;
+
+      if (data.status === 'done') {
+        clearInterval(pollInterval);
+        showResult(data.summary);
+        triggerDownload(currentJobId);
+      } else if (data.status === 'error') {
+        clearInterval(pollInterval);
+        showError(data.error || 'Unknown error.');
+      }
+    } catch (e) {
+      // transient network hiccup — keep polling
+    }
+  }
+
+  function showResult(summary) {
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('result-card').style.display = 'block';
+    document.getElementById('stat-total').textContent     = summary.total     ?? '—';
+    document.getElementById('stat-exact').textContent     = summary.exact     ?? '—';
+    document.getElementById('stat-embedding').textContent = summary.embedding ?? '—';
+    document.getElementById('stat-review').textContent    = summary.review_needed ?? '—';
+    btnRun.disabled = false;
+
+    document.getElementById('btn-download').onclick = () => triggerDownload(currentJobId);
+  }
+
+  function triggerDownload(jobId) {
+    const a = document.createElement('a');
+    a.href = '/api/download/' + jobId;
+    a.download = 'matches.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  function showError(msg) {
+    document.getElementById('spinner').style.display = 'none';
+    document.getElementById('error-card').style.display = 'block';
+    document.getElementById('error-msg').textContent = msg;
+    btnRun.disabled = false;
+    checkReady();
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+</script>
+</body>
+</html>
